@@ -162,12 +162,15 @@ function logv(m){const L=[...D.logs].sort((a,b)=>b.ts<a.ts?-1:1);m.innerHTML=`<d
 function access(m){m.innerHTML=`<div class="card"><h3>Access control</h3><p>You are the admin (owner). Roles are set through this page's <b>Share</b> menu in Claude:</p><ul><li><b>Contributor</b> – employees: can view and add/edit bookings, income, expenses, clients and staff. Cannot see partners, contributions, profit shares or settings.</li><li><b>Editor</b> – extra admins: full access.</li><li><b>Viewer</b> – read-only on operational data.</li></ul><p class="note">To revoke or change anyone, change their role in the Share menu.</p></div>`}
 const SUPABASE_URL='https://dailgcexvflkeqqlofma.supabase.co',SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRhaWxnY2V4dmZsa2VxcWxvZm1hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMTg1OTUsImV4cCI6MjEwNjY5NDU5NX0.R7Y55ALfVk1gn6XEjWcdy5P97r8hQcJSyLHsmDld6wY';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+function hideErr(){const b=document.getElementById('eb');if(b)b.remove()}
+function showErr(k,e){let b=document.getElementById('eb');if(!b){b=document.createElement('div');b.id='eb';b.style.cssText='background:#7a1f2b;color:#fff;padding:10px 16px;text-align:center;position:sticky;top:0;z-index:50';document.body.prepend(b)}
+b.innerHTML='Problem loading '+k+': '+String(e&&(e.message||e.code)||e).replace(/[<>&]/g,'')+' &nbsp;<button class="btn" id="eb2">Sign out and retry</button>';document.getElementById('eb2').onclick=async()=>{await sb.auth.signOut();location.reload()}}
 function makeDb(){const fetchC=async k=>{const {data,error}=await sb.from('records').select('id,data,actor').eq('coll',k);if(error)throw error;return {docs:(data||[]).map(r=>({id:r.id,data:()=>({...r.data,...(k==='logs'?{actor:r.actor}:{})})}))}};
 return{collection:k=>({doc:id=>({
 set:async d=>{const row={coll:k,id,data:d};const {error}=await(k==='logs'?sb.from('records').insert(row):sb.from('records').upsert(row,{onConflict:'coll,id'}));if(error)throw error},
 update:async p=>{const {data}=await sb.from('records').select('data').eq('coll',k).eq('id',id).single();const {error}=await sb.from('records').update({data:{...(data?.data||{}),...p},updated_at:new Date().toISOString()}).eq('coll',k).eq('id',id);if(error)throw error},
 delete:async()=>{const {error}=await sb.from('records').delete().eq('coll',k).eq('id',id);if(error)throw error}}),
-onSnapshot:(next,err)=>{const go=()=>fetchC(k).then(next).catch(e=>err&&err(e));go();sb.channel('c-'+k).on('postgres_changes',{event:'*',schema:'public',table:'records',filter:'coll=eq.'+k},go).subscribe();setInterval(go,30000)}})}}
+onSnapshot:(next,err)=>{const go=()=>fetchC(k).then(r=>{try{next(r);hideErr()}catch(x){console.error(x);showErr('screen',x)}},e=>err&&err(e));go();sb.channel('c-'+k).on('postgres_changes',{event:'*',schema:'public',table:'records',filter:'coll=eq.'+k},go).subscribe();setInterval(go,30000)}})}}
 async function login(){let {data}=await sb.auth.getSession(),s=data.session;
 while(!s){await new Promise(res=>{$('#m').innerHTML='<div class="card" style="max-width:360px;margin:40px auto"><h3>Partner login</h3><form id="lf" style="grid-template-columns:1fr"><div><label>Email</label><input name="e" type="email" required></div><div><label>Password</label><input name="p" type="password" required></div><button class="btn p">Sign in</button><p id="le" class="neg"></p></form></div>';
 $('#lf').onsubmit=async ev=>{ev.preventDefault();const f=ev.target,r=await sb.auth.signInWithPassword({email:f.e.value,password:f.p.value});if(r.error)$('#le').textContent=r.error.message;else{s=r.data.session;res()}}})}
@@ -179,6 +182,6 @@ $('#hl').innerHTML=LOGO;$('#sl').innerHTML=LOGO;setTimeout(()=>{$('#sp').style.o
 await login();$('#ex').onclick=exportXlsx;$('#em').onclick=async()=>{if(!confirm('Email the current business summary to all partners now?'))return;const {data,error}=await sb.functions.invoke('dashboard-email',{body:{}});if(!error)logAct('EMAIL REPORT','report','-','Summary emailed to '+(data?.sent||0)+' partner(s)');alert(error?'Failed: '+error.message:'Sent to '+(data?.sent||0)+' partner(s)')};try{const l=document.createElement('link');l.rel='apple-touch-icon';l.href=$('#hl img').src;document.head.appendChild(l)}catch(e){}
 if(!db){$('#m').innerHTML='<div class="card">Please open this page signed in to Claude to use the CRM.</div>';return}
 $('#who').textContent=me;
-Object.keys(D).forEach(k=>db.collection(k).onSnapshot(s=>{D[k]=s.docs.map(d=>({...d.data(),id:d.id}));if(!document.activeElement||document.activeElement.tagName!=='INPUT')render()},()=>{D[k]=[]}));
+Object.keys(D).forEach(k=>db.collection(k).onSnapshot(s=>{D[k]=s.docs.map(d=>({...d.data(),id:d.id}));if(!document.activeElement||document.activeElement.tagName!=='INPUT')render()},e=>showErr(k,e)));
 render()})();
 </script></body></html>
